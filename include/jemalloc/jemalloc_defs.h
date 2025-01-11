@@ -9,7 +9,7 @@
 #define JEMALLOC_HAVE_ATTR_FORMAT_ARG 
 
 /* Defined if format(gnu_printf, ...) attribute is supported. */
-/* #undef JEMALLOC_HAVE_ATTR_FORMAT_GNU_PRINTF */
+#define JEMALLOC_HAVE_ATTR_FORMAT_GNU_PRINTF 
 
 /* Defined if format(printf, ...) attribute is supported. */
 #define JEMALLOC_HAVE_ATTR_FORMAT_PRINTF 
@@ -29,7 +29,7 @@
  */
 #define JEMALLOC_OVERRIDE_MEMALIGN 
 #define JEMALLOC_OVERRIDE_VALLOC 
-/* #undef JEMALLOC_OVERRIDE_PVALLOC */
+#define JEMALLOC_OVERRIDE_PVALLOC 
 
 /*
  * At least Linux omits the "const" in:
@@ -38,14 +38,14 @@
  *
  * Match the operating system's prototype.
  */
-#define JEMALLOC_USABLE_SIZE_CONST const
+#define JEMALLOC_USABLE_SIZE_CONST 
 
 /*
  * If defined, specify throw() for the public function prototypes when compiling
  * with C++.  The only justification for this is to match the prototypes that
  * glibc defines.
  */
-/* #undef JEMALLOC_USE_CXX_THROW */
+#define JEMALLOC_USE_CXX_THROW 
 
 #ifdef _MSC_VER
 #  ifdef _WIN64
@@ -56,8 +56,4 @@
 #endif
 
 /* sizeof(void *) == 2^LG_SIZEOF_PTR. */
-#if defined(__LP64__)
 #define LG_SIZEOF_PTR 3
-#else
-#define LG_SIZEOF_PTR 2
-#endif

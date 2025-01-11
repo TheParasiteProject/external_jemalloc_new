@@ -817,6 +817,7 @@ enable_experimental_smallocx
 enable_prof
 enable_prof_libunwind
 with_static_libunwind
+enable_prof_frameptr
 enable_prof_libgcc
 enable_prof_gcc
 enable_dss
@@ -1484,6 +1485,8 @@ Optional Features:
                           Enable experimental smallocx API
   --enable-prof           Enable allocation profiling
   --enable-prof-libunwind Use libunwind for backtracing
+  --enable-prof-frameptr  Use optimized frame pointer unwinder for backtracing
+                          (Linux only)
   --disable-prof-libgcc   Do not use libgcc for backtracing
   --disable-prof-gcc      Do not use gcc intrinsics for backtracing
   --disable-dss           Disable usage of sbrk(2)
@@ -12679,6 +12682,92 @@ printf "%s\n" "#define JEMALLOC_PROF_LIBUNWIND  " >>confdefs.h
   fi
 fi
 
+if test `uname -s` = "Linux"
+then
+  # Check whether --enable-prof-frameptr was given.
+if test ${enable_prof_frameptr+y}
+then :
+  enableval=$enable_prof_frameptr; if test "x$enable_prof_frameptr" = "xno" ; then
+    enable_prof_frameptr="0"
+  else
+    enable_prof_frameptr="1"
+    if test "x$enable_prof" = "x0" ; then
+      as_fn_error $? "--enable-prof-frameptr should only be used with --enable-prof" "$LINENO" 5
+    fi
+  fi
+
+else case e in #(
+  e) enable_prof_frameptr="0"
+   ;;
+esac
+fi
+
+  if test "x$backtrace_method" = "x" -a "x$enable_prof_frameptr" = "x1" \
+      -a "x$GCC" = "xyes" ; then
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether compiler supports -fno-omit-frame-pointer" >&5
+printf %s "checking whether compiler supports -fno-omit-frame-pointer... " >&6; }
+T_CONFIGURE_CFLAGS="${CONFIGURE_CFLAGS}"
+T_APPEND_V=-fno-omit-frame-pointer
+  if test "x${CONFIGURE_CFLAGS}" = "x" -o "x${T_APPEND_V}" = "x" ; then
+  CONFIGURE_CFLAGS="${CONFIGURE_CFLAGS}${T_APPEND_V}"
+else
+  CONFIGURE_CFLAGS="${CONFIGURE_CFLAGS} ${T_APPEND_V}"
+fi
+
+
+if test "x${CONFIGURE_CFLAGS}" = "x" -o "x${SPECIFIED_CFLAGS}" = "x" ; then
+  CFLAGS="${CONFIGURE_CFLAGS}${SPECIFIED_CFLAGS}"
+else
+  CFLAGS="${CONFIGURE_CFLAGS} ${SPECIFIED_CFLAGS}"
+fi
+
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+int
+main (void)
+{
+
+    return 0;
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+  je_cv_cflags_added=-fno-omit-frame-pointer
+              { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+else case e in #(
+  e) je_cv_cflags_added=
+              { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+              CONFIGURE_CFLAGS="${T_CONFIGURE_CFLAGS}"
+ ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+if test "x${CONFIGURE_CFLAGS}" = "x" -o "x${SPECIFIED_CFLAGS}" = "x" ; then
+  CFLAGS="${CONFIGURE_CFLAGS}${SPECIFIED_CFLAGS}"
+else
+  CFLAGS="${CONFIGURE_CFLAGS} ${SPECIFIED_CFLAGS}"
+fi
+
+
+    backtrace_method="frame pointer linux"
+
+printf "%s\n" "#define JEMALLOC_PROF_FRAME_POINTER  " >>confdefs.h
+
+  else
+    enable_prof_frameptr="0"
+  fi
+else
+  enable_prof_frameptr="0"
+fi
+
 # Check whether --enable-prof-libgcc was given.
 if test ${enable_prof_libgcc+y}
 then :
@@ -14486,6 +14575,48 @@ printf "%s\n" "#define JEMALLOC_HAVE_CLOCK_REALTIME  " >>confdefs.h
 
 fi
 
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether clock_gettime_nsec_np() is compilable" >&5
+printf %s "checking whether clock_gettime_nsec_np() is compilable... " >&6; }
+if test ${je_cv_clock_gettime_nsec_np+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#include <time.h>
+
+int
+main (void)
+{
+
+	clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  je_cv_clock_gettime_nsec_np=yes
+else case e in #(
+  e) je_cv_clock_gettime_nsec_np=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext ;;
+esac
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $je_cv_clock_gettime_nsec_np" >&5
+printf "%s\n" "$je_cv_clock_gettime_nsec_np" >&6; }
+
+if test "x${je_cv_clock_gettime_nsec_np}" = "xyes" ; then
+
+printf "%s\n" "#define JEMALLOC_HAVE_CLOCK_GETTIME_NSEC_NP  " >>confdefs.h
+
+fi
+
 # Check whether --enable-syscall was given.
 if test ${enable_syscall+y}
 then :
@@ -15346,6 +15477,18 @@ fi
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $je_cv_thp" >&5
 printf "%s\n" "$je_cv_thp" >&6; }
 
+  case "${host_cpu}" in
+    arm*)
+      ;;
+    *)
+    if test "x${je_cv_thp}" = "xyes" ; then
+
+printf "%s\n" "#define JEMALLOC_HAVE_MADVISE_HUGE  " >>confdefs.h
+
+    fi
+    ;;
+  esac
+
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether madvise(..., MADV_[NO]CORE) is compilable" >&5
 printf %s "checking whether madvise(..., MADV_[NO]CORE) is compilable... " >&6; }
@@ -15388,17 +15531,48 @@ printf "%s\n" "$je_cv_madv_nocore" >&6; }
 printf "%s\n" "#define JEMALLOC_MADVISE_NOCORE  " >>confdefs.h
 
   fi
-case "${host_cpu}" in
-  arm*)
-    ;;
-  *)
-  if test "x${je_cv_thp}" = "xyes" ; then
 
-printf "%s\n" "#define JEMALLOC_HAVE_MADVISE_HUGE  " >>confdefs.h
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether madvise(..., MADV_COLLAPSE) is compilable" >&5
+printf %s "checking whether madvise(..., MADV_COLLAPSE) is compilable... " >&6; }
+if test ${je_cv_madv_collapse+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#include <sys/mman.h>
+
+int
+main (void)
+{
+
+	madvise((void *)0, 0, MADV_COLLAPSE);
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  je_cv_madv_collapse=yes
+else case e in #(
+  e) je_cv_madv_collapse=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext ;;
+esac
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $je_cv_madv_collapse" >&5
+printf "%s\n" "$je_cv_madv_collapse" >&6; }
+
+  if test "x${je_cv_madv_collapse}" = "xyes" ; then
+
+printf "%s\n" "#define JEMALLOC_HAVE_MADVISE_COLLAPSE  " >>confdefs.h
 
   fi
-  ;;
-esac
 else
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether posix_madvise is compilable" >&5
@@ -15861,6 +16035,48 @@ printf "%s\n" "$je_cv_pthread_mutex_adaptive_np" >&6; }
 if test "x${je_cv_pthread_mutex_adaptive_np}" = "xyes" ; then
 
 printf "%s\n" "#define JEMALLOC_HAVE_PTHREAD_MUTEX_ADAPTIVE_NP  " >>confdefs.h
+
+fi
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether gettid is compilable" >&5
+printf %s "checking whether gettid is compilable... " >&6; }
+if test ${je_cv_gettid+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#include <unistd.h>
+
+int
+main (void)
+{
+
+  int tid = gettid();
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  je_cv_gettid=yes
+else case e in #(
+  e) je_cv_gettid=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext ;;
+esac
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $je_cv_gettid" >&5
+printf "%s\n" "$je_cv_gettid" >&6; }
+
+if test "x${je_cv_gettid}" = "xyes" ; then
+
+printf "%s\n" "#define JEMALLOC_HAVE_GETTID  " >>confdefs.h
 
 fi
 
@@ -17729,6 +17945,8 @@ printf "%s\n" "experimental_smallocx : ${enable_experimental_smallocx}" >&6; }
 printf "%s\n" "prof               : ${enable_prof}" >&6; }
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: prof-libunwind     : ${enable_prof_libunwind}" >&5
 printf "%s\n" "prof-libunwind     : ${enable_prof_libunwind}" >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: prof-frameptr      : ${enable_prof_frameptr}" >&5
+printf "%s\n" "prof-frameptr      : ${enable_prof_frameptr}" >&6; }
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: prof-libgcc        : ${enable_prof_libgcc}" >&5
 printf "%s\n" "prof-libgcc        : ${enable_prof_libgcc}" >&6; }
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: prof-gcc           : ${enable_prof_gcc}" >&5
