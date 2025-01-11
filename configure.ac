@@ -1448,6 +1448,33 @@ if test "x$backtrace_method" = "x" -a "x$enable_prof_libunwind" = "x1" ; then
   fi
 fi
 
+if test `uname -s` = "Linux"
+then
+  AC_ARG_ENABLE([prof-frameptr],
+    [AS_HELP_STRING([--enable-prof-frameptr], [Use optimized frame pointer unwinder for backtracing (Linux only)])],
+  [if test "x$enable_prof_frameptr" = "xno" ; then
+    enable_prof_frameptr="0"
+  else
+    enable_prof_frameptr="1"
+    if test "x$enable_prof" = "x0" ; then
+      AC_MSG_ERROR([--enable-prof-frameptr should only be used with --enable-prof])
+    fi
+  fi
+  ],
+  [enable_prof_frameptr="0"]
+  )
+  if test "x$backtrace_method" = "x" -a "x$enable_prof_frameptr" = "x1" \
+      -a "x$GCC" = "xyes" ; then
+    JE_CFLAGS_ADD([-fno-omit-frame-pointer])
+    backtrace_method="frame pointer linux"
+    AC_DEFINE([JEMALLOC_PROF_FRAME_POINTER], [ ], [ ])
+  else
+    enable_prof_frameptr="0"
+  fi
+else
+  enable_prof_frameptr="0"
+fi
+
 AC_ARG_ENABLE([prof-libgcc],
   [AS_HELP_STRING([--disable-prof-libgcc],
   [Do not use libgcc for backtracing])],
@@ -2099,6 +2126,16 @@ if test "x${je_cv_clock_realtime}" = "xyes" ; then
   AC_DEFINE([JEMALLOC_HAVE_CLOCK_REALTIME], [ ], [ ])
 fi
 
+dnl Check for clock_gettime_nsec_np().
+JE_COMPILABLE([clock_gettime_nsec_np()], [
+#include <time.h>
+], [
+	clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+], [je_cv_clock_gettime_nsec_np])
+if test "x${je_cv_clock_gettime_nsec_np}" = "xyes" ; then
+  AC_DEFINE([JEMALLOC_HAVE_CLOCK_GETTIME_NSEC_NP], [ ], [ ])
+fi
+
 dnl Use syscall(2) (if available) by default.
 AC_ARG_ENABLE([syscall],
   [AS_HELP_STRING([--disable-syscall], [Disable use of syscall(2)])],
@@ -2434,6 +2471,16 @@ if test "x${je_cv_madvise}" = "xyes" ; then
 	madvise((void *)0, 0, MADV_HUGEPAGE);
 	madvise((void *)0, 0, MADV_NOHUGEPAGE);
 ], [je_cv_thp])
+  case "${host_cpu}" in
+    arm*)
+      ;;
+    *)
+    if test "x${je_cv_thp}" = "xyes" ; then
+      AC_DEFINE([JEMALLOC_HAVE_MADVISE_HUGE], [ ], [ ])
+    fi
+    ;;
+  esac
+
   dnl Check for madvise(..., MADV_[NO]CORE).
   JE_COMPILABLE([madvise(..., MADV_[[NO]]CORE)], [
 #include <sys/mman.h>
@@ -2444,15 +2491,16 @@ if test "x${je_cv_madvise}" = "xyes" ; then
   if test "x${je_cv_madv_nocore}" = "xyes" ; then
     AC_DEFINE([JEMALLOC_MADVISE_NOCORE], [ ], [ ])
   fi
-case "${host_cpu}" in
-  arm*)
-    ;;
-  *)
-  if test "x${je_cv_thp}" = "xyes" ; then
-    AC_DEFINE([JEMALLOC_HAVE_MADVISE_HUGE], [ ], [ ])
+
+  dnl Check for madvise(..., MADV_COLLAPSE).
+  JE_COMPILABLE([madvise(..., MADV_COLLAPSE)], [
+#include <sys/mman.h>
+], [
+	madvise((void *)0, 0, MADV_COLLAPSE);
+], [je_cv_madv_collapse])
+  if test "x${je_cv_madv_collapse}" = "xyes" ; then
+    AC_DEFINE([JEMALLOC_HAVE_MADVISE_COLLAPSE], [ ], [ ])
   fi
-  ;;
-esac
 else
   dnl Check for posix_madvise.
   JE_COMPILABLE([posix_madvise], [
@@ -2658,6 +2706,15 @@ if test "x${je_cv_pthread_mutex_adaptive_np}" = "xyes" ; then
   AC_DEFINE([JEMALLOC_HAVE_PTHREAD_MUTEX_ADAPTIVE_NP], [ ], [ ])
 fi
 
+JE_COMPILABLE([gettid], [
+#include <unistd.h>
+], [
+  int tid = gettid();
+], [je_cv_gettid])
+if test "x${je_cv_gettid}" = "xyes" ; then
+  AC_DEFINE([JEMALLOC_HAVE_GETTID], [ ], [ ])
+fi
+
 JE_CFLAGS_SAVE()
 JE_CFLAGS_ADD([-D_GNU_SOURCE])
 JE_CFLAGS_ADD([-Werror])
@@ -2847,6 +2904,7 @@ AC_MSG_RESULT([stats              : ${enable_stats}])
 AC_MSG_RESULT([experimental_smallocx : ${enable_experimental_smallocx}])
 AC_MSG_RESULT([prof               : ${enable_prof}])
 AC_MSG_RESULT([prof-libunwind     : ${enable_prof_libunwind}])
+AC_MSG_RESULT([prof-frameptr      : ${enable_prof_frameptr}])
 AC_MSG_RESULT([prof-libgcc        : ${enable_prof_libgcc}])
 AC_MSG_RESULT([prof-gcc           : ${enable_prof_gcc}])
 AC_MSG_RESULT([fill               : ${enable_fill}])
