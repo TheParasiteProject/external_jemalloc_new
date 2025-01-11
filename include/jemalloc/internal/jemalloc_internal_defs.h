@@ -1,3 +1,8 @@
+/* Include cdefs to see if __BIONIC__ is set */
+#include <sys/cdefs.h>
+#if !defined(__BIONIC__)
+#include "jemalloc_internal_defs_host.h"
+#else
 /* include/jemalloc/internal/jemalloc_internal_defs.h.  Generated from jemalloc_internal_defs.h.in by configure.  */
 #ifndef JEMALLOC_INTERNAL_DEFS_H_
 #define JEMALLOC_INTERNAL_DEFS_H_
@@ -6,22 +11,22 @@
  * public APIs to be prefixed.  This makes it possible, with some care, to use
  * multiple allocators simultaneously.
  */
-/* #undef JEMALLOC_PREFIX */
-/* #undef JEMALLOC_CPREFIX */
+#define JEMALLOC_PREFIX "je_"
+#define JEMALLOC_CPREFIX "JE_"
 
 /*
  * Define overrides for non-standard allocator-related functions if they are
  * present on the system.
  */
-#define JEMALLOC_OVERRIDE___LIBC_CALLOC 
-#define JEMALLOC_OVERRIDE___LIBC_FREE 
+/* #undef JEMALLOC_OVERRIDE___LIBC_CALLOC */
+/* #undef JEMALLOC_OVERRIDE___LIBC_FREE */
 /* #undef JEMALLOC_OVERRIDE___LIBC_FREE_SIZED */
 /* #undef JEMALLOC_OVERRIDE___LIBC_FREE_ALIGNED_SIZED */
-#define JEMALLOC_OVERRIDE___LIBC_MALLOC 
-#define JEMALLOC_OVERRIDE___LIBC_MEMALIGN 
-#define JEMALLOC_OVERRIDE___LIBC_REALLOC 
-#define JEMALLOC_OVERRIDE___LIBC_VALLOC 
-#define JEMALLOC_OVERRIDE___LIBC_PVALLOC 
+/* #undef JEMALLOC_OVERRIDE___LIBC_MALLOC */
+/* #undef JEMALLOC_OVERRIDE___LIBC_MEMALIGN */
+/* #undef JEMALLOC_OVERRIDE___LIBC_REALLOC */
+/* #undef JEMALLOC_OVERRIDE___LIBC_VALLOC */
+/* #undef JEMALLOC_OVERRIDE___LIBC_PVALLOC */
 /* #undef JEMALLOC_OVERRIDE___POSIX_MEMALIGN */
 
 /*
@@ -36,16 +41,32 @@
  * Hyper-threaded CPUs may need a special instruction inside spin loops in
  * order to yield to another virtual CPU.
  */
+#if defined(__x86_64__)
 #define CPU_SPINWAIT __asm__ volatile("pause")
 /* 1 if CPU_SPINWAIT is defined, 0 otherwise. */
 #define HAVE_CPU_SPINWAIT 1
+#elif defined(__aarch64__) || defined(__arm__)
+#define CPU_SPINWAIT __asm__ volatile("isb")
+/* 1 if CPU_SPINWAIT is defined, 0 otherwise. */
+#define HAVE_CPU_SPINWAIT 1
+#else
+#define CPU_SPINWAIT 
+/* 1 if CPU_SPINWAIT is defined, 0 otherwise. */
+#define HAVE_CPU_SPINWAIT 0
+#endif
 
 /*
  * Number of significant bits in virtual addresses.  This may be less than the
  * total number of bits in a pointer, e.g. on x64, for which the uppermost 16
  * bits are the same as bit 47.
  */
+#if defined(__x86_64__)
+#define LG_VADDR 57
+#elif defined(__LP64__)
 #define LG_VADDR 48
+#else
+#define LG_VADDR 32
+#endif
 
 /* Defined if C11 atomics are available. */
 #define JEMALLOC_C11_ATOMICS 
@@ -76,7 +97,7 @@
 /*
  * Defined if secure_getenv(3) is available.
  */
-#define JEMALLOC_HAVE_SECURE_GETENV 
+/* #undef JEMALLOC_HAVE_SECURE_GETENV */
 
 /*
  * Defined if issetugid(2) is available.
@@ -186,7 +207,7 @@
  * JEMALLOC_DSS enables use of sbrk(2) to allocate extents from the data storage
  * segment (DSS).
  */
-#define JEMALLOC_DSS 
+/* #undef JEMALLOC_DSS */
 
 /* Support memory filling (junk/zero). */
 #define JEMALLOC_FILL 
@@ -220,7 +241,12 @@
  * system does not explicitly support huge pages; system calls that require
  * explicit huge page support are separately configured.
  */
+/* ANDROID NOTE: This determines how big a default map'd page is. */
+#if !defined(__LP64__)
+#define LG_HUGEPAGE 20
+#else
 #define LG_HUGEPAGE 21
+#endif
 
 /*
  * If defined, adjacent virtual memory mappings with identical attributes
@@ -237,7 +263,12 @@
  * common sequences of mmap()/munmap() calls will cause virtual memory map
  * holes.
  */
+#if defined(__LP64__)
+// Only use retain for 64 bit since virtual memory can be exhausted
+// very easily when running in 32 bit.
+// See b/142556796.
 #define JEMALLOC_RETAIN 
+#endif
 
 /* TLS is used to map arenas and magazine caches to threads. */
 #define JEMALLOC_TLS 
@@ -329,6 +360,7 @@
  *                                 MADV_FREE, though typically with higher
  *                                 system overhead.
  */
+ /* MADV_FREE available since kernel 4.5 but not all devices support this yet. */
 #define JEMALLOC_PURGE_MADVISE_FREE 
 #define JEMALLOC_PURGE_MADVISE_DONTNEED 
 #define JEMALLOC_PURGE_MADVISE_DONTNEED_ZEROS 
@@ -389,7 +421,11 @@
 #define LG_SIZEOF_INT 2
 
 /* sizeof(long) == 2^LG_SIZEOF_LONG. */
+#ifdef __LP64__
 #define LG_SIZEOF_LONG 3
+#else
+#define LG_SIZEOF_LONG 2
+#endif
 
 /* sizeof(long long) == 2^LG_SIZEOF_LONG_LONG. */
 #define LG_SIZEOF_LONG_LONG 3
@@ -410,7 +446,7 @@
 #define JEMALLOC_HAVE_DLSYM 
 
 /* Adaptive mutex support in pthreads. */
-#define JEMALLOC_HAVE_PTHREAD_MUTEX_ADAPTIVE_NP 
+/* #undef JEMALLOC_HAVE_PTHREAD_MUTEX_ADAPTIVE_NP */
 
 /* GNU specific sched_getcpu support */
 #define JEMALLOC_HAVE_SCHED_GETCPU 
@@ -419,12 +455,12 @@
 #define JEMALLOC_HAVE_SCHED_SETAFFINITY 
 
 /* pthread_setaffinity_np support */
-#define JEMALLOC_HAVE_PTHREAD_SETAFFINITY_NP 
+/* #undef JEMALLOC_HAVE_PTHREAD_SETAFFINITY_NP */
 
 /*
  * If defined, all the features necessary for background threads are present.
  */
-#define JEMALLOC_BACKGROUND_THREAD 
+/* #undef JEMALLOC_BACKGROUND_THREAD */
 
 /*
  * If defined, jemalloc symbols are not exported (doesn't work when
@@ -436,7 +472,7 @@
 #define JEMALLOC_CONFIG_MALLOC_CONF ""
 
 /* If defined, jemalloc takes the malloc/free/etc. symbol names. */
-#define JEMALLOC_IS_MALLOC 
+/* #undef JEMALLOC_IS_MALLOC */
 
 /*
  * Defined if strerror_r returns char * if _GNU_SOURCE is defined.
@@ -462,16 +498,16 @@
 #define JEMALLOC_ZERO_REALLOC_DEFAULT_FREE 
 
 /* If defined, use volatile asm during benchmarks. */
-#define JEMALLOC_HAVE_ASM_VOLATILE 
+/* #undef JEMALLOC_HAVE_ASM_VOLATILE */
 
 /*
  * If defined, support the use of rdtscp to get the time stamp counter
  * and the processor ID.
  */
-#define JEMALLOC_HAVE_RDTSCP 
+/* #undef JEMALLOC_HAVE_RDTSCP */
 
 /* If defined, use __int128 for optimization. */
-#define JEMALLOC_HAVE_INT128 
+/* #undef JEMALLOC_HAVE_INT128 */
 
 #include "jemalloc/internal/jemalloc_internal_overrides.h"
 
